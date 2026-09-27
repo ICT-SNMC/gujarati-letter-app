@@ -97,7 +97,7 @@
   }
   .mic-btn.recording { background: var(--danger); }
   .btn {
-    background: #fff;
+    background: var(--paper);
     border: 1px solid var(--border);
     color: var(--ink);
     border-radius: var(--radius);
@@ -108,6 +108,18 @@
     cursor: pointer;
   }
   .btn:hover { border-color: var(--gold-600); }
+
+  @media (max-width: 480px) {
+    header { padding: 14px 14px calc(12px + env(safe-area-inset-top, 0px)); }
+    header h1 { font-size: 17px; }
+    main { padding: 16px 14px 28px; gap: 12px; }
+    .mic-btn { padding: 13px 22px; font-size: 16px; width: 100%; justify-content: center; }
+    .controls { flex-direction: column; align-items: stretch; }
+    .controls .btn { width: 100%; text-align: center; }
+    #editor { min-height: 45vh; font-size: 17px; padding: 16px; }
+    .footer-actions { flex-direction: column; align-items: stretch; }
+    .footer-actions .btn { width: 100%; text-align: center; }
+  }
 
   .status {
     text-align: center;
@@ -178,7 +190,8 @@
     <button id="copyBtn" class="btn">📋 કૉપિ કરો</button>
   </div>
 
-  <p class="hint">માઇક્રોફોનની પરવાનગી જરૂરી છે. શ્રેષ્ઠ પરિણામ માટે Chrome બ્રાઉઝરનો ઉપયોગ કરો.</p>
+  <p class="hint">માઇક્રોફોનની પરવાનગી જરૂરી છે. શ્રેષ્ઠ પરિણામ માટે Chrome બ્રાઉઝરનો ઉપયોગ કરો.<br>
+  બોલો: "નવી લાઇન" · "નવો ફકરો" · "અલ્પવિરામ" · "પૂર્ણવિરામ" · "પ્રશ્નાર્થ ચિહ્ન" · "ઉદ્ગાર ચિહ્ન" · "કૌંસ ખોલો" / "કૌંસ બંધ કરો" · "ડેશ" — આ શબ્દો ટાઇપ થશે નહીં, ફક્ત ક્રિયા કરશે.</p>
 </main>
 
 <script>
@@ -208,6 +221,50 @@
     } else {
       editor.appendChild(node);
     }
+  }
+
+  function insertHtmlAtCursor(html) {
+    editor.focus();
+    var sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+      var range = sel.getRangeAt(0);
+      range.deleteContents();
+      var frag = document.createRange().createContextualFragment(html);
+      var lastNode = frag.lastChild;
+      range.insertNode(frag);
+      if (lastNode) {
+        range.setStartAfter(lastNode);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } else {
+      editor.insertAdjacentHTML('beforeend', html);
+    }
+  }
+
+  // Voice commands: spoken phrase -> action. These are matched instead of being typed.
+  var COMMANDS = [
+    { phrases: ['નવી લાઇન', 'નવી લાઈન'], action: function () { insertHtmlAtCursor('<br>'); } },
+    { phrases: ['નવો ફકરો'], action: function () { insertHtmlAtCursor('<br><br>'); } },
+    { phrases: ['અલ્પવિરામ'], action: function () { insertAtCursor(', '); } },
+    { phrases: ['પૂર્ણવિરામ', 'વિરામચિહ્ન'], action: function () { insertAtCursor('. '); } },
+    { phrases: ['પ્રશ્નાર્થ ચિહ્ન', 'પ્રશ્નાર્થચિહ્ન'], action: function () { insertAtCursor('? '); } },
+    { phrases: ['ઉદ્ગાર ચિહ્ન', 'ઉદ્ગારચિહ્ન'], action: function () { insertAtCursor('! '); } },
+    { phrases: ['કૌંસ ખોલો'], action: function () { insertAtCursor('('); } },
+    { phrases: ['કૌંસ બંધ કરો'], action: function () { insertAtCursor(') '); } },
+    { phrases: ['ડેશ', 'હાઇફન', 'હાઈફન'], action: function () { insertAtCursor('-'); } },
+    { phrases: ['જગ્યા'], action: function () { insertAtCursor(' '); } }
+  ];
+
+  function matchCommand(transcript) {
+    var t = transcript.trim().replace(/[.,!?]+$/, '');
+    for (var i = 0; i < COMMANDS.length; i++) {
+      for (var j = 0; j < COMMANDS[i].phrases.length; j++) {
+        if (t === COMMANDS[i].phrases[j]) return COMMANDS[i];
+      }
+    }
+    return null;
   }
 
   document.getElementById('clearBtn').addEventListener('click', function () {
@@ -248,7 +305,13 @@
       for (var i = event.resultIndex; i < event.results.length; i++) {
         var result = event.results[i];
         if (result.isFinal) {
-          insertAtCursor(result[0].transcript.trim() + ' ');
+          var transcript = result[0].transcript;
+          var cmd = matchCommand(transcript);
+          if (cmd) {
+            cmd.action();
+          } else {
+            insertAtCursor(transcript.trim() + ' ');
+          }
         }
       }
     };
